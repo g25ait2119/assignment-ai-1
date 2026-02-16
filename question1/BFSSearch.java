@@ -6,7 +6,7 @@ import java.util.*;
 public class BFSSearch {
 
     public static void main(String[] args) throws Exception {
-        final String inputFile = args.length > 0 ? args[0] : "question1/inputfile/input.txt";
+        final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
         final int[][] input = PuzzleState.readInput(inputFile);
         final int[] initial = input[0];
         final int[] goal = input[1];
