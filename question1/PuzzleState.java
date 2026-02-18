@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.stream.*;
 import java.io.*;
 
 /**
@@ -8,231 +9,250 @@ import java.io.*;
 public class PuzzleState {
 
     public static final int SIZE = 3;
+    public static final int TILE_COUNT = SIZE * SIZE;
+    public static final int BLANK = 0;
 
     // Direction vectors: Up, Down, Left, Right
     public static final int[] DR = {-1, 1, 0, 0};
     public static final int[] DC = {0, 0, -1, 1};
     public static final String[] DIR_NAMES = {"Up", "Down", "Left", "Right"};
 
+    /**
+     * Build a lookup table mapping each tile value to its (row, col) in the goal state.
+     */
     public static int[][] goalPosition(final int[] goal) {
-        final int[][] goalPosition = new int[9][2];
-        for (int i = 0; i < 9; i++) {
-            final int val = goal[i];
-            goalPosition[val] = new int[]{i / SIZE, i % SIZE};
+        final int[][] positions = new int[TILE_COUNT][2];
+        for (int i = 0; i < TILE_COUNT; i++) {
+            final int tile = goal[i];
+            positions[tile] = new int[]{i / SIZE, i % SIZE};
         }
-        return goalPosition;
+        return positions;
     }
 
     /**
      * Parse state string like "123;B46;758" or "123 456 78B" into int array.
-     * 'B' or '0' represents blank.
+     * 'B' or '0' represents the blank.
      */
-    public static int[] parseState(String s) {
-        s = s.replace(";", "").replace("B", "0").replace(" ", "");
-        final int[] state = new int[s.length()];
-        for (int i = 0; i < s.length(); i++) {
-            state[i] = s.charAt(i) - '0';
-        }
-        return state;
+    public static int[] parseState(final String raw) {
+        final String cleaned = raw.replace(";", "").replace("B", "0").replace(" ", "");
+        return cleaned.chars()
+                .map(ch -> ch - '0')
+                .toArray();
     }
 
     /**
-     * Read initial and goal states from input.txt.
+     * Read initial and goal states from input file.
      * Returns int[2][9]: [0] = initial, [1] = goal.
      */
-    public static int[][] readInput(String filename) throws Exception {
-        Scanner sc = new Scanner(new File(filename));
-        String startLine = sc.nextLine().trim();
-        String goalLine = sc.hasNextLine() ? sc.nextLine().trim() : "123 456 78B";
-        sc.close();
-        return new int[][]{parseState(startLine), parseState(goalLine)};
+    public static int[][] readInput(final String filepath) throws Exception {
+        try (final Scanner reader = new Scanner(new File(filepath))) {
+            final String startLine = reader.nextLine().trim();
+            final String goalLine = reader.hasNextLine() ? reader.nextLine().trim() : "123 456 78B";
+            return new int[][]{parseState(startLine), parseState(goalLine)};
+        }
     }
 
-    public static List<int[][]> readInputMultipleLines(String filename) {
-        final List<int[][]> inputData = new ArrayList<>();
-        List<String> lines = new ArrayList<>();
+    /**
+     * Read multiple puzzle pairs from a file (every 2 non-empty lines form one puzzle).
+     * Validates that line count is even.
+     */
+    public static List<int[][]> readInputMultipleLines(final String filepath) {
+        final List<String> lines = readNonEmptyLines(filepath);
 
-        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-                    lines.add(line.trim());
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Error reading file: " + e.getMessage());
-
+        if (lines.isEmpty()) {
+            return Collections.emptyList();
         }
 
         if (lines.size() % 2 != 0) {
             System.out.println("Exception: Input file is incomplete. Please check the goal state or provided input.txt file");
             System.out.println("Total lines found: " + lines.size());
-            return inputData;
+            return Collections.emptyList();
         }
 
-        final int totalSets = lines.size() / 2;
-        for (int i = 0; i < totalSets; i++) {
-            final int inputIndex = i * 2;
-            final int outputIndex = i * 2 + 1;
+        return IntStream.range(0, lines.size() / 2)
+                .mapToObj(i -> new int[][]{
+                        parseState(lines.get(i * 2)),
+                        parseState(lines.get(i * 2 + 1))
+                })
+                .collect(Collectors.toList());
+    }
 
-            inputData.add(new int[][]{parseState(lines.get(inputIndex)), parseState(lines.get(outputIndex))});
+    /**
+     * Read all non-empty trimmed lines from a file.
+     */
+    private static List<String> readNonEmptyLines(final String filepath) {
+        try (final BufferedReader reader = new BufferedReader(new FileReader(filepath))) {
+            return reader.lines()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .collect(Collectors.toList());
+        } catch (final IOException e) {
+            System.out.println("Error reading file: " + e.getMessage());
+            return Collections.emptyList();
         }
-
-        return inputData;
     }
 
     /**
      * Display state as "1 2 3 / B 4 6 / 7 5 8"
      */
-    public static String stateToString(int[] state) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 9; i++) {
-            sb.append(state[i] == 0 ? "B" : state[i]);
-            if (i % 3 == 2 && i < 8) sb.append(" / ");
-            else if (i < 8) sb.append(" ");
-        }
-        return sb.toString();
+    public static String stateToString(final int[] state) {
+        return IntStream.range(0, TILE_COUNT)
+                .mapToObj(i -> {
+                    final String tile = state[i] == BLANK ? "B" : String.valueOf(state[i]);
+                    final String separator = (i % SIZE == 2 && i < TILE_COUNT - 1) ? " / "
+                            : (i < TILE_COUNT - 1) ? " " : "";
+                    return tile + separator;
+                })
+                .collect(Collectors.joining());
     }
 
     /**
-     * Display state as a 3x3 grid
+     * Display state as a 3x3 grid.
      */
-    public static String stateToGrid(int[] state) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 9; i++) {
-            sb.append(state[i] == 0 ? "B" : state[i]);
-            sb.append(i % 3 == 2 ? "\n" : " ");
-        }
-        return sb.toString();
+    public static String stateToGrid(final int[] state) {
+        return IntStream.range(0, TILE_COUNT)
+                .mapToObj(i -> {
+                    final String tile = state[i] == BLANK ? "B" : String.valueOf(state[i]);
+                    final String separator = (i % SIZE == 2) ? "\n" : " ";
+                    return tile + separator;
+                })
+                .collect(Collectors.joining());
     }
 
     /**
      * Find the index of the blank (0) in the state array.
      */
-    public static int findBlank(int[] state) {
-        for (int i = 0; i < 9; i++) {
-            if (state[i] == 0) return i;
-        }
-        return -1;
+    public static int findBlank(final int[] state) {
+        return IntStream.range(0, TILE_COUNT)
+                .filter(i -> state[i] == BLANK)
+                .findFirst()
+                .orElse(-1);
     }
 
     /**
      * Check if state matches the goal.
      */
-    public static boolean isGoal(int[] state, int[] goal) {
+    public static boolean isGoal(final int[] state, final int[] goal) {
         return Arrays.equals(state, goal);
     }
 
     /**
-     * Create a new state by swapping positions i and j.
+     * Create a new state by swapping tiles at two positions.
      */
-    public static int[] swap(int[] state, int i, int j) {
-        int[] next = state.clone();
-        int tmp = next[i];
-        next[i] = next[j];
-        next[j] = tmp;
-        return next;
+    public static int[] swap(final int[] state, final int posA, final int posB) {
+        final int[] newState = state.clone();
+        final int temp = newState[posA];
+        newState[posA] = newState[posB];
+        newState[posB] = temp;
+        return newState;
     }
 
     /**
-     * Generate all valid neighbor states by moving the blank.
+     * Generate all valid neighbor states by sliding a tile into the blank position.
      */
-    public static List<int[]> getNeighbors(int[] state) {
-        List<int[]> neighbors = new ArrayList<>();
-        int blank = findBlank(state);
-        int r = blank / SIZE, c = blank % SIZE;
-        for (int d = 0; d < 4; d++) {
-            int nr = r + DR[d], nc = c + DC[d];
-            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) {
-                neighbors.add(swap(state, blank, nr * SIZE + nc));
-            }
-        }
-        return neighbors;
+    public static List<int[]> getNeighbors(final int[] state) {
+        final int blankPos = findBlank(state);
+        final int blankRow = blankPos / SIZE;
+        final int blankCol = blankPos % SIZE;
+
+        return IntStream.range(0, 4)
+                .filter(dir -> {
+                    final int newRow = blankRow + DR[dir];
+                    final int newCol = blankCol + DC[dir];
+                    return newRow >= 0 && newRow < SIZE && newCol >= 0 && newCol < SIZE;
+                })
+                .mapToObj(dir -> {
+                    final int targetPos = (blankRow + DR[dir]) * SIZE + (blankCol + DC[dir]);
+                    return swap(state, blankPos, targetPos);
+                })
+                .collect(Collectors.toList());
     }
 
     /**
      * Get the action name (Up/Down/Left/Right) that transforms 'from' to 'to'.
      */
-    public static String getAction(int[] from, int[] to) {
-        int blankFrom = findBlank(from);
-        int blankTo = findBlank(to);
-        int dr = (blankTo / SIZE) - (blankFrom / SIZE);
-        int dc = (blankTo % SIZE) - (blankFrom % SIZE);
-        for (int d = 0; d < 4; d++) {
-            if (DR[d] == dr && DC[d] == dc) return DIR_NAMES[d];
-        }
-        return "?";
+    public static String getAction(final int[] from, final int[] to) {
+        final int blankBefore = findBlank(from);
+        final int blankAfter = findBlank(to);
+        final int rowDelta = (blankAfter / SIZE) - (blankBefore / SIZE);
+        final int colDelta = (blankAfter % SIZE) - (blankBefore % SIZE);
+
+        return IntStream.range(0, 4)
+                .filter(dir -> DR[dir] == rowDelta && DC[dir] == colDelta)
+                .mapToObj(dir -> DIR_NAMES[dir])
+                .findFirst()
+                .orElse("?");
     }
 
     /**
      * h1: Number of misplaced manuscripts (excluding blank).
      */
-    public static int h1(int[] state, int[] goal) {
-        int count = 0;
-        for (int i = 0; i < 9; i++) {
-            if (state[i] != 0 && state[i] != goal[i]) count++;
-        }
-        return count;
+    public static int h1(final int[] state, final int[] goal) {
+        return (int) IntStream.range(0, TILE_COUNT)
+                .filter(i -> state[i] != BLANK && state[i] != goal[i])
+                .count();
     }
 
     /**
      * h2: Total Manhattan Distance of all tiles from goal positions.
      */
-    public static int h2(int[] state, int[][] goalPosition) {
-        int dist = 0;
-        for (int i = 0; i < 9; i++) {
-            int val = state[i];
-            if (val != 0) {
-                int currentRow = i / SIZE, currentCol = i % SIZE;
-                dist += Math.abs(currentRow - goalPosition[val][0])
-                        + Math.abs(currentCol - goalPosition[val][1]);
-            }
-        }
-        return dist;
+    public static int h2(final int[] state, final int[][] goalPositions) {
+        return IntStream.range(0, TILE_COUNT)
+                .filter(i -> state[i] != BLANK)
+                .map(i -> {
+                    final int tile = state[i];
+                    final int currentRow = i / SIZE;
+                    final int currentCol = i % SIZE;
+                    return Math.abs(currentRow - goalPositions[tile][0])
+                            + Math.abs(currentCol - goalPositions[tile][1]);
+                })
+                .sum();
     }
 
     /**
-     * Reconstruct path from parent map.
-     * parent maps state-key -> parent-state-key.
-     * stateMap maps state-key -> int[] state.
+     * Reconstruct path from goal back to start using the parent chain.
      */
-    public static List<int[]> reconstructPath(Map<String, String> parent,
-                                              Map<String, int[]> stateMap,
-                                              int[] goal) {
-        List<int[]> path = new ArrayList<>();
-        String key = Arrays.toString(goal);
+    public static List<int[]> reconstructPath(final Map<String, String> parentOf,
+                                              final Map<String, int[]> stateByKey,
+                                              final int[] goalState) {
+        final List<int[]> solutionPath = new ArrayList<>();
+        String key = Arrays.toString(goalState);
         while (key != null) {
-            path.add(stateMap.get(key));
-            key = parent.get(key);
+            solutionPath.add(stateByKey.get(key));
+            key = parentOf.get(key);
         }
-        Collections.reverse(path);
-        return path;
+        Collections.reverse(solutionPath);
+        return solutionPath;
     }
 
+    /**
+     * Print the search result summary including path and timing.
+     */
     public static void printResult(final String algorithm, final String heuristic,
-                                   final boolean success, final List<int[]> path,
-                                   final int statesExplored, final long timeTakenInMS) {
+                                   final boolean solved, final List<int[]> solutionPath,
+                                   final int nodesExplored, final long elapsedMs) {
         System.out.println("=".repeat(60));
         System.out.println("Algorithm    : " + algorithm
                 + (heuristic.isEmpty() ? "" : " (" + heuristic + ")"));
         System.out.println("=".repeat(60));
-        System.out.println("Status       : " + (success ? "SUCCESS" : "FAILURE"));
-        System.out.println("States Explored: " + statesExplored);
-        System.out.println("Time Taken   : " + timeTakenInMS + " ms");
+        System.out.println("Status       : " + (solved ? "SUCCESS" : "FAILURE"));
+        System.out.println("States Explored: " + nodesExplored);
+        System.out.println("Time Taken   : " + elapsedMs + " ms");
 
-        if (success && path != null && path.size() > 1) {
-            System.out.println("Path Length  : " + (path.size() - 1) + " moves");
-            System.out.print("Path         : ");
-            for (int i = 1; i < path.size(); i++) {
-                System.out.print(getAction(path.get(i - 1), path.get(i)));
-                if (i < path.size() - 1) System.out.print(" -> ");
-            }
+        if (solved && solutionPath != null && solutionPath.size() > 1) {
+            final int moveCount = solutionPath.size() - 1;
+            System.out.println("Path Length  : " + moveCount + " moves");
+
+            final String pathDescription = IntStream.range(1, solutionPath.size())
+                    .mapToObj(i -> getAction(solutionPath.get(i - 1), solutionPath.get(i)))
+                    .collect(Collectors.joining(" -> "));
+            System.out.println("Path         : " + pathDescription);
 
             System.out.println("\nInitial State:");
-            System.out.print(stateToGrid(path.get(0)));
+            System.out.print(stateToGrid(solutionPath.get(0)));
 
             System.out.println("Goal State:");
-            System.out.print(stateToGrid(path.get((path.size() - 1))));
+            System.out.print(stateToGrid(solutionPath.get(solutionPath.size() - 1)));
         }
     }
 }

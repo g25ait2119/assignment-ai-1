@@ -1,0 +1,7 @@
+# Security Bot Scheduling - CSP Input
+# Bots (Domain)
+BOTS: A, B, C
+# Time Slots (Variables)
+SLOTS: 1, 2, 3, 4
+# Unary Constraints
+BOT_C_NOT_IN: 4

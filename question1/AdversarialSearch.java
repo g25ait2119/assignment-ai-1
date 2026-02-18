@@ -1,5 +1,5 @@
-
 import java.util.*;
+import java.util.stream.*;
 
 /**
  * Adversarial Search for the Manuscript Sorting Problem.
@@ -7,236 +7,277 @@ import java.util.*;
  */
 public class AdversarialSearch {
 
-    private static int minimaxCalls = 0;
-    private static int alphaBetaCalls = 0;
+    private static int minimaxNodeCount = 0;
+    private static int alphaBetaNodeCount = 0;
 
     /**
      * Utility = negative Manhattan distance.
      * MAX wants this high (close to 0 = near goal).
      * MIN wants this low (far from goal).
      */
-    static int getNVeManhattanDistance(int[] state, int[][] goalPositions) {
+    static int computeUtility(final int[] state, final int[][] goalPositions) {
         return -PuzzleState.h2(state, goalPositions);
     }
 
     /**
-     * Plain Minimax search.
+     * Evaluate state using plain Minimax search.
      *
-     * @param state   current game state
-     * @param depth   remaining depth to search
-     * @param isMax   true if MAX's turn, false if MIN's turn
-     * @param visited visited states
+     * @param state          current game state
+     * @param remainingDepth remaining depth to search
+     * @param isMaxTurn      true if MAX's turn, false if MIN's turn
+     * @param visitedStates  visited states to avoid cycles
      * @return minimax value
      */
-    static int minimax(int[] state, int[] goal, int[][] goalPositions, int depth, boolean isMax, Set<String> visited) {
-        minimaxCalls++;
+    static int evaluateWithMinimax(final int[] state, final int[] goal, final int[][] goalPositions,
+                                   final int remainingDepth, final boolean isMaxTurn,
+                                   final Set<String> visitedStates) {
+        minimaxNodeCount++;
 
-        // check if max depth reached or goal reached
-        if (depth == 0 || PuzzleState.isGoal(state, goal)) {
-            return getNVeManhattanDistance(state, goalPositions);
+        if (remainingDepth == 0 || PuzzleState.isGoal(state, goal)) {
+            return computeUtility(state, goalPositions);
         }
 
-        final List<int[]> neighbors = PuzzleState.getNeighbors(state);
+        final List<int[]> successors = PuzzleState.getNeighbors(state);
+        final int fallbackValue = computeUtility(state, goalPositions);
 
-        if (isMax) {
-            // choose move that maximizes utility -- MAX player
-            int best = Integer.MIN_VALUE;
-            for (int[] next : neighbors) {
-                String key = Arrays.toString(next);
-                if (!visited.contains(key)) {
-                    visited.add(key);
-                    int val = minimax(next, goal, goalPositions, depth - 1, false, visited);
-                    best = Math.max(best, val);
-                    visited.remove(key);
-                }
-            }
-            return best == Integer.MIN_VALUE ? getNVeManhattanDistance(state, goalPositions) : best;
+        if (isMaxTurn) {
+            return successors.stream()
+                    .map(Arrays::toString)
+                    .filter(key -> !visitedStates.contains(key))
+                    .mapToInt(key -> {
+                        final int[] next = parseState(key);
+                        visitedStates.add(key);
+                        final int value = evaluateWithMinimax(next, goal, goalPositions,
+                                remainingDepth - 1, false, visitedStates);
+                        visitedStates.remove(key);
+                        return value;
+                    })
+                    .max()
+                    .orElse(fallbackValue);
         } else {
-            //  choose move that minimizes utility --MIN player
-            int worst = Integer.MAX_VALUE;
-            for (int[] next : neighbors) {
-                String key = Arrays.toString(next);
-                if (!visited.contains(key)) {
-                    visited.add(key);
-                    int val = minimax(next, goal, goalPositions, depth - 1, true, visited);
-                    worst = Math.min(worst, val);
-                    visited.remove(key);
-                }
-            }
-            return worst == Integer.MAX_VALUE ? getNVeManhattanDistance(state, goalPositions) : worst;
+            return successors.stream()
+                    .map(Arrays::toString)
+                    .filter(key -> !visitedStates.contains(key))
+                    .mapToInt(key -> {
+                        final int[] next = parseState(key);
+                        visitedStates.add(key);
+                        final int value = evaluateWithMinimax(next, goal, goalPositions,
+                                remainingDepth - 1, true, visitedStates);
+                        visitedStates.remove(key);
+                        return value;
+                    })
+                    .min()
+                    .orElse(fallbackValue);
         }
     }
 
     /**
-     * Minimax with Alpha-Beta pruning.
+     * Parse a state array from its string representation.
+     */
+    private static int[] parseState(final String key) {
+        return Arrays.stream(key.replaceAll("[\\[\\] ]", "").split(","))
+                .mapToInt(Integer::parseInt)
+                .toArray();
+    }
+
+    /**
+     * Evaluate state using Minimax with Alpha-Beta pruning.
      *
      * @param alpha best value MAX can guarantee (lower bound)
      * @param beta  best value MIN can guarantee (upper bound)
      *              Prunes when beta <= alpha (remaining branches cannot affect decision).
      */
-    static int alphaBeta(int[] state, int[] goal, int[][] goalPositions, int depth, int alpha, int beta,
-                         boolean isMax, Set<String> visited) {
-        alphaBetaCalls++;
+    static int evaluateWithAlphaBeta(final int[] state, final int[] goal, final int[][] goalPositions,
+                                     final int remainingDepth, int alpha, int beta,
+                                     final boolean isMaxTurn, final Set<String> visitedStates) {
+        alphaBetaNodeCount++;
 
-        if (depth == 0 || PuzzleState.isGoal(state, goal)) {
-            return getNVeManhattanDistance(state, goalPositions);
+        if (remainingDepth == 0 || PuzzleState.isGoal(state, goal)) {
+            return computeUtility(state, goalPositions);
         }
 
-        final List<int[]> neighbors = PuzzleState.getNeighbors(state);
+        final List<int[]> successors = PuzzleState.getNeighbors(state);
+        final int fallbackValue = computeUtility(state, goalPositions);
 
-        if (isMax) {
-            int best = Integer.MIN_VALUE;
-            for (int[] next : neighbors) {
+        if (isMaxTurn) {
+            int bestScore = Integer.MIN_VALUE;
+            for (final int[] next : successors) {
                 final String key = Arrays.toString(next);
-                if (!visited.contains(key)) {
-                    visited.add(key);
-                    int val = alphaBeta(next, goal, goalPositions, depth - 1, alpha, beta, false, visited);
-                    best = Math.max(best, val);
-                    visited.remove(key);
-                    alpha = Math.max(alpha, best);
-                    if (beta <= alpha) break;  // Beta cutoff - prune
-                }
+                if (visitedStates.contains(key)) continue;
+
+                visitedStates.add(key);
+                final int value = evaluateWithAlphaBeta(next, goal, goalPositions,
+                        remainingDepth - 1, alpha, beta, false, visitedStates);
+                visitedStates.remove(key);
+
+                bestScore = Math.max(bestScore, value);
+                alpha = Math.max(alpha, bestScore);
+                if (beta <= alpha) break;
             }
-            return best == Integer.MIN_VALUE ? getNVeManhattanDistance(state, goalPositions) : best;
+            return bestScore == Integer.MIN_VALUE ? fallbackValue : bestScore;
         } else {
-            int worst = Integer.MAX_VALUE;
-            for (int[] next : neighbors) {
+            int worstScore = Integer.MAX_VALUE;
+            for (final int[] next : successors) {
                 final String key = Arrays.toString(next);
-                if (!visited.contains(key)) {
-                    visited.add(key);
-                    final int val = alphaBeta(next, goal, goalPositions, depth - 1, alpha, beta, true, visited);
-                    worst = Math.min(worst, val);
-                    visited.remove(key);
-                    beta = Math.min(beta, worst);
-                    if (beta <= alpha) {
-                        break; // Alpha cutoff - prune
-                    }
-                }
+                if (visitedStates.contains(key)) continue;
+
+                visitedStates.add(key);
+                final int value = evaluateWithAlphaBeta(next, goal, goalPositions,
+                        remainingDepth - 1, alpha, beta, true, visitedStates);
+                visitedStates.remove(key);
+
+                worstScore = Math.min(worstScore, value);
+                beta = Math.min(beta, worstScore);
+                if (beta <= alpha) break;
             }
-            return worst == Integer.MAX_VALUE ? getNVeManhattanDistance(state, goalPositions) : worst;
+            return worstScore == Integer.MAX_VALUE ? fallbackValue : worstScore;
         }
     }
 
     /**
-     * Find best move for MAX using Minimax.
+     * Find the best move for MAX using plain Minimax.
      */
-    static int[] runMinimax(int[] initial, int[] goal, int[][] goalPositions, int depth) {
-        minimaxCalls = 0;
-        final Set<String> visited = new HashSet<>();
-        visited.add(Arrays.toString(initial));
-        int bestVal = Integer.MIN_VALUE;
+    static int[] findBestMoveMinimax(final int[] initial, final int[] goal,
+                                     final int[][] goalPositions, final int searchDepth) {
+        minimaxNodeCount = 0;
+        final Set<String> visitedStates = new HashSet<>();
+        visitedStates.add(Arrays.toString(initial));
+
+        int bestScore = Integer.MIN_VALUE;
         int[] bestMove = null;
         String bestAction = "";
 
-        for (int[] next : PuzzleState.getNeighbors(initial)) {
+        for (final int[] next : PuzzleState.getNeighbors(initial)) {
             final String key = Arrays.toString(next);
-            visited.add(key);
-            int val = minimax(next, goal, goalPositions, depth - 1, false, visited);
-            visited.remove(key);
-            if (val > bestVal) {
-                bestVal = val;
+            visitedStates.add(key);
+            final int value = evaluateWithMinimax(next, goal, goalPositions,
+                    searchDepth - 1, false, visitedStates);
+            visitedStates.remove(key);
+
+            if (value > bestScore) {
+                bestScore = value;
                 bestMove = next;
                 bestAction = PuzzleState.getAction(initial, next);
             }
         }
 
-        System.out.println("Best move: " + bestAction + " (utility=" + bestVal + ")");
+        System.out.println("Best move: " + bestAction + " (utility=" + bestScore + ")");
         return bestMove;
     }
 
     /**
-     * Find best move for MAX using Alpha-Beta.
+     * Find the best move for MAX using Alpha-Beta pruning.
      */
-    static int[] runAlphaBeta(int[] initial, int[] goal, int[][] goalPositions, int depth) {
-        alphaBetaCalls = 0;
-        final Set<String> visited = new HashSet<>();
-        visited.add(Arrays.toString(initial));
-        int bestVal = Integer.MIN_VALUE;
+    static int[] findBestMoveAlphaBeta(final int[] initial, final int[] goal,
+                                       final int[][] goalPositions, final int searchDepth) {
+        alphaBetaNodeCount = 0;
+        final Set<String> visitedStates = new HashSet<>();
+        visitedStates.add(Arrays.toString(initial));
+
+        int bestScore = Integer.MIN_VALUE;
         int[] bestMove = null;
         String bestAction = "";
 
-        for (int[] next : PuzzleState.getNeighbors(initial)) {
-            String key = Arrays.toString(next);
-            visited.add(key);
-            int val = alphaBeta(next, goal, goalPositions, depth - 1, Integer.MIN_VALUE, Integer.MAX_VALUE,
-                    false, visited);
-            visited.remove(key);
-            if (val > bestVal) {
-                bestVal = val;
+        for (final int[] next : PuzzleState.getNeighbors(initial)) {
+            final String key = Arrays.toString(next);
+            visitedStates.add(key);
+            final int value = evaluateWithAlphaBeta(next, goal, goalPositions,
+                    searchDepth - 1, Integer.MIN_VALUE, Integer.MAX_VALUE,
+                    false, visitedStates);
+            visitedStates.remove(key);
+
+            if (value > bestScore) {
+                bestScore = value;
                 bestMove = next;
                 bestAction = PuzzleState.getAction(initial, next);
             }
         }
 
-        System.out.println("  Best move: " + bestAction + " (utility=" + bestVal + ")");
+        System.out.println("  Best move: " + bestAction + " (utility=" + bestScore + ")");
         return bestMove;
     }
 
-    public static void main(String[] args) {
-        final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
-
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
-
-        for (final int[][] input : inputData) {
-            processSearch(input);
-        }
-    }
-
-    private static void processSearch(int[][] input) {
+    /**
+     * Run both search strategies on a single puzzle and print comparison.
+     */
+    private static void solveAndCompare(final int[][] input) {
         final int[] initial = input[0];
         final int[] goal = input[1];
         final int[][] goalPositions = PuzzleState.goalPosition(goal);
+        final int searchDepth = 6;
+
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
         System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
         System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
-
-        final int searchDepth = 6;
         System.out.println("Adversarial Search Depth: " + searchDepth);
         System.out.println("Utility function: u(s) = -ManhattanDistance(s)");
         System.out.println();
 
+        // Plain Minimax
         System.out.println("--- Plain MINI - MAX ---");
-        final long t1 = System.currentTimeMillis();
-        final int[] mmMove = runMinimax(initial, goal, goalPositions, searchDepth);
-        final long mmTime = System.currentTimeMillis() - t1;
-        final int mmStates = minimaxCalls;
-        System.out.println("  States evaluated: " + mmStates);
-        System.out.println("  Time: " + mmTime + " ms");
-        if (mmMove != null) {
-            System.out.println("  Resulting state:");
-            System.out.print(PuzzleState.stateToGrid(mmMove));
-        }
+        final long minimaxStart = System.currentTimeMillis();
+        final int[] minimaxMove = findBestMoveMinimax(initial, goal, goalPositions, searchDepth);
+        final long minimaxElapsed = System.currentTimeMillis() - minimaxStart;
+        final int minimaxNodes = minimaxNodeCount;
+
+        System.out.println("  States evaluated: " + minimaxNodes);
+        System.out.println("  Time: " + minimaxElapsed + " ms");
+        Optional.ofNullable(minimaxMove)
+                .ifPresent(move -> {
+                    System.out.println("  Resulting state:");
+                    System.out.print(PuzzleState.stateToGrid(move));
+                });
         System.out.println();
 
+        // Alpha-Beta
         System.out.println("--- Alpha-Beta Pruning ---");
-        final long t2 = System.currentTimeMillis();
-        final int[] alphaBeta = runAlphaBeta(initial, goal, goalPositions, searchDepth);
-        final long alphaBetaTime = System.currentTimeMillis() - t2;
+        final long alphaBetaStart = System.currentTimeMillis();
+        final int[] alphaBetaMove = findBestMoveAlphaBeta(initial, goal, goalPositions, searchDepth);
+        final long alphaBetaElapsed = System.currentTimeMillis() - alphaBetaStart;
 
-        System.out.println("  States evaluated: " + alphaBetaCalls);
-        System.out.println("  Time: " + alphaBetaTime + " ms");
-        if (alphaBeta != null) {
-            System.out.println("  Resulting state:");
-            System.out.print(PuzzleState.stateToGrid(alphaBeta));
-        }
+        System.out.println("  States evaluated: " + alphaBetaNodeCount);
+        System.out.println("  Time: " + alphaBetaElapsed + " ms");
+        Optional.ofNullable(alphaBetaMove)
+                .ifPresent(move -> {
+                    System.out.println("  Resulting state:");
+                    System.out.print(PuzzleState.stateToGrid(move));
+                });
         System.out.println();
 
-        // ---- Comparison ----
+        // Comparison
+        printComparison(searchDepth, minimaxNodes, minimaxElapsed,
+                alphaBetaNodeCount, alphaBetaElapsed, minimaxMove, alphaBetaMove);
+    }
+
+    /**
+     * Print side-by-side comparison of Minimax vs Alpha-Beta results.
+     */
+    private static void printComparison(final int searchDepth,
+                                        final int minimaxNodes, final long minimaxElapsed,
+                                        final int alphaBetaNodes, final long alphaBetaElapsed,
+                                        final int[] minimaxMove, final int[] alphaBetaMove) {
         System.out.println("=".repeat(60));
         System.out.println("Minimax vs Alpha-Beta (depth=" + searchDepth + ")");
         System.out.println("=".repeat(60));
         System.out.println("                    Minimax    Alpha-Beta");
-        System.out.println("States evaluated:   " + String.format("%-11d%d", mmStates, alphaBetaCalls));
-        System.out.println("Time (ms):          " + String.format("%-11d%d", mmTime, alphaBetaTime));
+        System.out.println("States evaluated:   " + String.format("%-11d%d", minimaxNodes, alphaBetaNodes));
+        System.out.println("Time (ms):          " + String.format("%-11d%d", minimaxElapsed, alphaBetaElapsed));
         System.out.println("Same best move?     "
-                + (Arrays.equals(mmMove, alphaBeta) ? "YES (pruning is lossless)" : "NO (unexpected)"));
-        if (mmStates > 0) {
-            final double savings = (1.0 - (double) alphaBetaCalls / mmStates) * 100;
-            System.out.printf("Pruning saved:      %.1f%% of state evaluations%n", savings);
+                + (Arrays.equals(minimaxMove, alphaBetaMove) ? "YES (pruning is lossless)" : "NO (unexpected)"));
+
+        if (minimaxNodes > 0) {
+            final double savingsPercent = (1.0 - (double) alphaBetaNodes / minimaxNodes) * 100;
+            System.out.printf("Pruning saved:      %.1f%% of state evaluations%n", savingsPercent);
         }
         System.out.println("#".repeat(60));
+    }
+
+    public static void main(final String[] args) {
+        final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
+
+        if (puzzles.isEmpty()) return;
+
+        puzzles.forEach(AdversarialSearch::solveAndCompare);
     }
 }

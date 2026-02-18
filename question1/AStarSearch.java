@@ -1,120 +1,129 @@
 import java.util.*;
+import java.util.stream.*;
 
 /**
  * A* Search for the Manuscript Sorting Problem.
  */
 public class AStarSearch {
 
-    // Node for priority queue
-    final static class Node implements Comparable<Node> {
-        int[] state;
-        int pathCost;
-        int huresticValue;
-        int totalEstimatedCost;
-        String key;
+    /**
+     * Represents a search node in the A* frontier.
+     */
+    static final class SearchNode implements Comparable<SearchNode> {
+        final int[] state;
+        final int pathCost;
+        final int heuristicValue;
+        final int totalEstimatedCost;
+        final String stateKey;
 
-        Node(int[] state, int pathCost, int huresticValue) {
+        SearchNode(final int[] state, final int pathCost, final int heuristicValue) {
             this.state = state;
             this.pathCost = pathCost;
-            this.huresticValue = huresticValue;
-            this.totalEstimatedCost = pathCost + huresticValue;
-            this.key = Arrays.toString(state);
+            this.heuristicValue = heuristicValue;
+            this.totalEstimatedCost = pathCost + heuristicValue;
+            this.stateKey = Arrays.toString(state);
         }
 
-        public int compareTo(Node o) {
-            if (this.totalEstimatedCost != o.totalEstimatedCost) {
-                return Integer.compare(this.totalEstimatedCost, o.totalEstimatedCost);
-            }
-            return Integer.compare(this.huresticValue, o.huresticValue); // tie-break: prefer lower h
+        @Override
+        public int compareTo(final SearchNode other) {
+            final int costComparison = Integer.compare(this.totalEstimatedCost, other.totalEstimatedCost);
+            return costComparison != 0
+                    ? costComparison
+                    : Integer.compare(this.heuristicValue, other.heuristicValue);
         }
     }
 
     /**
-     * Run A* with specified heuristic.
-     *
-     * @param useH1 true = h1 (misplaced tiles), false = h2 (Manhattan distance)
+     * Compute heuristic value for a state using the selected strategy.
      */
-    static void runAStar(int[] initial, int[] goal, int[][] goalPositions, boolean useH1) {
-        final String hName = useH1 ? "h1 - Misplaced Tiles" : "h2 - Manhattan Distance";
+    private static int computeHeuristic(final int[] state, final int[] goal,
+                                        final int[][] goalPositions, final boolean useMisplacedTiles) {
+        return useMisplacedTiles
+                ? PuzzleState.h1(state, goal)
+                : PuzzleState.h2(state, goalPositions);
+    }
+
+    /**
+     * Solve the puzzle using A* search with the specified heuristic.
+     *
+     * @param useMisplacedTiles true = h1 (misplaced tiles), false = h2 (Manhattan distance)
+     */
+    static void solve(final int[] initial, final int[] goal, final int[][] goalPositions,
+                      final boolean useMisplacedTiles) {
+        final String heuristicName = useMisplacedTiles ? "h1 - Misplaced Tiles" : "h2 - Manhattan Distance";
         final long startTime = System.currentTimeMillis();
-        int statesExplored = 0;
-        boolean success = false;
+        int nodesExplored = 0;
+        boolean solved = false;
         List<int[]> solutionPath = null;
 
-        final PriorityQueue<Node> frontier = new PriorityQueue<>();
-        Map<String, Integer> bestPathCost = new HashMap<>(); // best g-value found for each state
-        Map<String, String> parent = new HashMap<>();
-        Map<String, int[]> stateMap = new HashMap<>();
+        final PriorityQueue<SearchNode> frontier = new PriorityQueue<>();
+        final Map<String, Integer> lowestCostTo = new HashMap<>();
+        final Map<String, String> parentOf = new HashMap<>();
+        final Map<String, int[]> stateByKey = new HashMap<>();
 
-        String initKey = Arrays.toString(initial);
-        final int huresticVal = useH1 ? PuzzleState.h1(initial, goal) : PuzzleState.h2(initial, goalPositions);
-        frontier.add(new Node(initial, 0, huresticVal));
-        bestPathCost.put(initKey, 0);
-        parent.put(initKey, null);
-        stateMap.put(initKey, initial);
+        final String initialKey = Arrays.toString(initial);
+        final int initialHeuristic = computeHeuristic(initial, goal, goalPositions, useMisplacedTiles);
+        frontier.add(new SearchNode(initial, 0, initialHeuristic));
+        lowestCostTo.put(initialKey, 0);
+        parentOf.put(initialKey, null);
+        stateByKey.put(initialKey, initial);
 
         while (!frontier.isEmpty()) {
-            Node node = frontier.poll();
-            statesExplored++;
+            final SearchNode current = frontier.poll();
+            nodesExplored++;
 
-            // Goal test
-            if (PuzzleState.isGoal(node.state, goal)) {
-                success = true;
-                solutionPath = PuzzleState.reconstructPath(parent, stateMap, node.state);
+            if (PuzzleState.isGoal(current.state, goal)) {
+                solved = true;
+                solutionPath = PuzzleState.reconstructPath(parentOf, stateByKey, current.state);
                 break;
             }
 
-            // Skip if we already found a better path to this state
-            if (node.pathCost > bestPathCost.getOrDefault(node.key, Integer.MAX_VALUE)) {
+            // Skip if a cheaper path to this state was already found
+            if (current.pathCost > lowestCostTo.getOrDefault(current.stateKey, Integer.MAX_VALUE)) {
                 continue;
             }
 
-            // Expand neighbors
-            for (int[] neighbor : PuzzleState.getNeighbors(node.state)) {
-                String nKey = Arrays.toString(neighbor);
-                int newG = node.pathCost + 1; // each move costs 1 unit of System Energy
+            for (final int[] successor : PuzzleState.getNeighbors(current.state)) {
+                final String successorKey = Arrays.toString(successor);
+                final int newCost = current.pathCost + 1;
 
-                if (newG < bestPathCost.getOrDefault(nKey, Integer.MAX_VALUE)) {
-                    bestPathCost.put(nKey, newG);
-                    parent.put(nKey, node.key);
-                    stateMap.put(nKey, neighbor);
-                    int nh = useH1 ? PuzzleState.h1(neighbor, goal) : PuzzleState.h2(neighbor, goalPositions);
-                    frontier.add(new Node(neighbor, newG, nh));
+                if (newCost < lowestCostTo.getOrDefault(successorKey, Integer.MAX_VALUE)) {
+                    lowestCostTo.put(successorKey, newCost);
+                    parentOf.put(successorKey, current.stateKey);
+                    stateByKey.put(successorKey, successor);
+                    final int successorHeuristic = computeHeuristic(successor, goal, goalPositions, useMisplacedTiles);
+                    frontier.add(new SearchNode(successor, newCost, successorHeuristic));
                 }
             }
         }
 
-        final long timeMs = System.currentTimeMillis() - startTime;
-
-        PuzzleState.printResult("A* Search", hName,
-                success, solutionPath, statesExplored, timeMs);
+        final long elapsedMs = System.currentTimeMillis() - startTime;
+        PuzzleState.printResult("A* Search", heuristicName, solved, solutionPath, nodesExplored, elapsedMs);
     }
 
-    public static void main(String[] args) {
+    /**
+     * Solve a single puzzle with both heuristics and print results.
+     */
+    private static void solveWithBothHeuristics(final int[][] puzzle) {
+        final int[] initial = puzzle[0];
+        final int[] goal = puzzle[1];
+        final int[][] goalPositions = PuzzleState.goalPosition(goal);
 
+        System.out.println("Start State: " + PuzzleState.stateToString(initial));
+        System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
+        System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
+
+        solve(initial, goal, goalPositions, true);
+        solve(initial, goal, goalPositions, false);
+        System.out.println("#".repeat(60));
+    }
+
+    public static void main(final String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
 
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
+        if (puzzles.isEmpty()) return;
 
-        for (final int[][] input : inputData) {
-            final int[] initial = input[0];
-            final int[] goal = input[1];
-            final int[][] goalPositions = PuzzleState.goalPosition(goal);
-
-            System.out.println("Start State: " + PuzzleState.stateToString(initial));
-            System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
-            System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
-
-            // Run A* with h1 (Misplaced Tiles)
-            runAStar(initial, goal, goalPositions, true);
-
-            // Run A* with h2 (Manhattan Distance)
-            runAStar(initial, goal, goalPositions, false);
-            System.out.println("#".repeat(60));
-        }
-
+        puzzles.forEach(AStarSearch::solveWithBothHeuristics);
     }
 }

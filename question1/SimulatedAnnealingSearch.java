@@ -1,115 +1,124 @@
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
+import java.util.stream.*;
 
 /**
  * Simulated Annealing for the Manuscript Sorting Problem.
  */
 public class SimulatedAnnealingSearch {
 
-    // Cooling schedule parameters
-    private static final double INITIAL_TEMP = 1000.0;
-    private static final double COOLING_RATE = 0.9995;
-    private static final double MIN_TEMP = 0.001;
-    private static final int MAX_ITERATIONS = 500000;
+    private static final double STARTING_TEMPERATURE = 1000.0;
+    private static final double COOLING_FACTOR = 0.9995;
+    private static final double TEMPERATURE_FLOOR = 0.001;
+    private static final int ITERATION_LIMIT = 500000;
+    private static final int PROGRESS_INTERVAL = 100000;
+    private static final long RANDOM_SEED = 42;
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
 
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
+        if (puzzles.isEmpty()) return;
 
-        for (final int[][] input : inputData) {
-            processSearch(input);
+        puzzles.forEach(puzzle -> {
+            solveAndPrint(puzzle);
             System.out.println("#".repeat(60));
-        }
+        });
     }
 
-    private static void processSearch(int[][] input) {
-        final int[] initial = input[0];
-        final int[] goal = input[1];
+    /**
+     * Solve a single puzzle using Simulated Annealing and print the results.
+     */
+    private static void solveAndPrint(final int[][] puzzle) {
+        final int[] initial = puzzle[0];
+        final int[] goal = puzzle[1];
         final int[][] goalPositions = PuzzleState.goalPosition(goal);
 
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
         System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
         System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
 
-        // Cooling schedule info
-        System.out.println("Cooling Schedule:");
-        System.out.println("  T0           = " + INITIAL_TEMP);
-        System.out.println("  Cooling Rate = " + COOLING_RATE);
-        System.out.println("  T_min        = " + MIN_TEMP);
-        System.out.println("  Max Iter     = " + MAX_ITERATIONS);
-        System.out.println();
+        printCoolingSchedule();
 
-        // Run Simulated Annealing
-        long startTime = System.currentTimeMillis();
-        Random rng = new Random(42); // fixed seed for reproducibility
-        int statesExplored = 0;
-        boolean success = false;
+        final long startTime = System.currentTimeMillis();
+        final Random rng = new Random(RANDOM_SEED);
+        int nodesExplored = 0;
+        boolean solved = false;
 
-        double T = INITIAL_TEMP;
+        double temperature = STARTING_TEMPERATURE;
         int[] current = initial.clone();
-        int currentH = PuzzleState.h2(current, goalPositions);
+        int currentDistance = PuzzleState.h2(current, goalPositions);
 
-        // Track best state found
-        int[] bestState = current.clone();
-        int bestH = currentH;
+        int[] closestState = current.clone();
+        int closestDistance = currentDistance;
 
-        // Track path
-        List<int[]> path = new ArrayList<>();
-        path.add(initial.clone());
+        final List<int[]> solutionPath = new ArrayList<>();
+        solutionPath.add(initial.clone());
 
-        for (int iter = 0; iter < MAX_ITERATIONS && T > MIN_TEMP; iter++) {
-            statesExplored++;
+        for (int iteration = 0; iteration < ITERATION_LIMIT && temperature > TEMPERATURE_FLOOR; iteration++) {
+            nodesExplored++;
 
-            // Check if goal reached
-            if (currentH == 0) {
-                success = true;
+            if (currentDistance == 0) {
+                solved = true;
                 break;
             }
 
-            // Select a random neighbor
-            List<int[]> neighbors = PuzzleState.getNeighbors(current);
-            int[] next = neighbors.get(rng.nextInt(neighbors.size()));
-            int nextH = PuzzleState.h2(next, goalPositions);
-            int deltaE = nextH - currentH; // positive = worse
+            final List<int[]> successors = PuzzleState.getNeighbors(current);
+            final int[] candidate = successors.get(rng.nextInt(successors.size()));
+            final int candidateDistance = PuzzleState.h2(candidate, goalPositions);
+            final int costDifference = candidateDistance - currentDistance;
 
-            // Acceptance criterion: P = e^(-deltaE / T)
-            if (deltaE < 0 || rng.nextDouble() < Math.exp(-deltaE / T)) {
-                current = next;
-                currentH = nextH;
-                path.add(current.clone());
+            if (shouldAccept(costDifference, temperature, rng)) {
+                current = candidate;
+                currentDistance = candidateDistance;
+                solutionPath.add(current.clone());
 
-                if (currentH < bestH) {
-                    bestH = currentH;
-                    bestState = current.clone();
+                if (currentDistance < closestDistance) {
+                    closestDistance = currentDistance;
+                    closestState = current.clone();
                 }
             }
 
-            // Cool down
-            T *= COOLING_RATE;
+            temperature *= COOLING_FACTOR;
 
-            // Progress logging every 100,000 iterations
-            if ((iter + 1) % 100000 == 0) {
-                System.out.printf("  Iteration %d: T=%.4f, current h2=%d, best h2=%d%n", iter + 1, T, currentH, bestH);
+            if ((iteration + 1) % PROGRESS_INTERVAL == 0) {
+                System.out.printf("  Iteration %d: T=%.4f, current h2=%d, best h2=%d%n",
+                        iteration + 1, temperature, currentDistance, closestDistance);
             }
         }
 
-        long timeMs = System.currentTimeMillis() - startTime;
+        final long elapsedMs = System.currentTimeMillis() - startTime;
 
-        // Print results
         System.out.println();
-        PuzzleState.printResult("Simulated Annealing", "h2 - Manhattan Distance", success, success ? path : null, statesExplored, timeMs);
+        PuzzleState.printResult("Simulated Annealing", "h2 - Manhattan Distance",
+                solved, solved ? solutionPath : null, nodesExplored, elapsedMs);
 
-        System.out.println("Final Temperature: " + String.format("%.6f", T));
-        System.out.println("Best h2 achieved : " + bestH);
-        if (!success) {
+        System.out.printf("Final Temperature: %.6f%n", temperature);
+        System.out.println("Best h2 achieved : " + closestDistance);
+        if (!solved) {
             System.out.println("Best state found (not goal):");
-            System.out.print(PuzzleState.stateToGrid(bestState));
+            System.out.print(PuzzleState.stateToGrid(closestState));
         }
+        System.out.println();
+    }
+
+    /**
+     * Decide whether to accept a candidate state based on the Metropolis criterion.
+     * Always accepts improvements; accepts worse states with probability e^(-delta/T).
+     */
+    private static boolean shouldAccept(final int costDifference, final double temperature,
+                                        final Random rng) {
+        return costDifference < 0 || rng.nextDouble() < Math.exp(-costDifference / temperature);
+    }
+
+    /**
+     * Print the cooling schedule parameters.
+     */
+    private static void printCoolingSchedule() {
+        System.out.println("Cooling Schedule:");
+        System.out.println("  T0           = " + STARTING_TEMPERATURE);
+        System.out.println("  Cooling Rate = " + COOLING_FACTOR);
+        System.out.println("  T_min        = " + TEMPERATURE_FLOOR);
+        System.out.println("  Max Iter     = " + ITERATION_LIMIT);
         System.out.println();
     }
 }

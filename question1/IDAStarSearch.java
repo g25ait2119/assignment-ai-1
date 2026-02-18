@@ -5,115 +5,130 @@ import java.util.*;
  */
 public class IDAStarSearch {
 
-    private static int statesExplored;
+    private static int nodesExplored;
+
+    private static final int SOLUTION_FOUND = -1;
 
     /**
-     * Recursive DFS with f-value threshold.
-     * Returns: -1 if FOUND, otherwise the minimum f exceeding threshold.
+     * Recursive depth-limited search with f-value threshold.
+     * Returns SOLUTION_FOUND (-1) if goal reached, otherwise the minimum f exceeding the threshold.
      */
-    static int idaSearch(List<int[]> path, int[] goal, int[][] goalPositions, Set<String> pathSet,
-                         int g, int threshold, boolean useH1) {
-        int[] current = path.get(path.size() - 1);
-        int h = useH1 ? PuzzleState.h1(current, goal) : PuzzleState.h2(current, goalPositions);
-        int f = g + h;
+    static int depthLimitedSearch(final List<int[]> currentPath, final int[] goal,
+                                  final int[][] goalPositions, final Set<String> onCurrentPath,
+                                  final int pathCost, final int threshold,
+                                  final boolean useMisplacedTiles) {
+        final int[] current = currentPath.get(currentPath.size() - 1);
+        final int heuristic = useMisplacedTiles
+                ? PuzzleState.h1(current, goal)
+                : PuzzleState.h2(current, goalPositions);
+        final int estimatedTotal = pathCost + heuristic;
 
-        if (f > threshold) {
-            return f; // Exceeded threshold
+        if (estimatedTotal > threshold) {
+            return estimatedTotal;
         }
-        statesExplored++;
+
+        nodesExplored++;
+
         if (PuzzleState.isGoal(current, goal)) {
-            return -1;  // FOUND
+            return SOLUTION_FOUND;
         }
 
-        int min = Integer.MAX_VALUE;
-        for (int[] neighbor : PuzzleState.getNeighbors(current)) {
-            String nKey = Arrays.toString(neighbor);
-            if (!pathSet.contains(nKey)) {  // Cycle detection on current path
-                path.add(neighbor);
-                pathSet.add(nKey);
+        int nextThreshold = Integer.MAX_VALUE;
+        for (final int[] successor : PuzzleState.getNeighbors(current)) {
+            final String successorKey = Arrays.toString(successor);
+            if (onCurrentPath.contains(successorKey)) continue;
 
-                int result = idaSearch(path, goal, goalPositions, pathSet, g + 1, threshold, useH1);
+            currentPath.add(successor);
+            onCurrentPath.add(successorKey);
 
-                if (result == -1) return -1;  // Found solution
-                if (result < min) min = result;
+            final int searchResult = depthLimitedSearch(currentPath, goal, goalPositions,
+                    onCurrentPath, pathCost + 1, threshold, useMisplacedTiles);
 
-                path.remove(path.size() - 1);
-                pathSet.remove(nKey);
-            }
+            if (searchResult == SOLUTION_FOUND) return SOLUTION_FOUND;
+            nextThreshold = Math.min(nextThreshold, searchResult);
+
+            currentPath.remove(currentPath.size() - 1);
+            onCurrentPath.remove(successorKey);
         }
-        return min;
+
+        return nextThreshold;
     }
 
     /**
-     * Run IDA* with specified heuristic.
+     * Solve the puzzle using IDA* with the specified heuristic.
      *
-     * @param useH1 true = h1 (misplaced tiles), false = h2 (Manhattan distance)
+     * @param useMisplacedTiles true = h1 (misplaced tiles), false = h2 (Manhattan distance)
      */
-    static void runIDAStar(int[] initial, int[] goal, int[][] goalPositions, boolean useH1) {
-        String hName = useH1 ? "h1 - Misplaced Tiles" : "h2 - Manhattan Distance";
-        long startTime = System.currentTimeMillis();
-        statesExplored = 0;
-        boolean success = false;
+    static void solve(final int[] initial, final int[] goal, final int[][] goalPositions,
+                      final boolean useMisplacedTiles) {
+        final String heuristicName = useMisplacedTiles ? "h1 - Misplaced Tiles" : "h2 - Manhattan Distance";
+        final long startTime = System.currentTimeMillis();
+        nodesExplored = 0;
+        boolean solved = false;
         List<int[]> solutionPath = null;
 
-        int threshold = useH1 ? PuzzleState.h1(initial, goal) : PuzzleState.h2(initial, goalPositions);
-        final List<int[]> path = new ArrayList<>();
-        path.add(initial);
-        Set<String> pathSet = new HashSet<>();
-        pathSet.add(Arrays.toString(initial));
+        int threshold = useMisplacedTiles
+                ? PuzzleState.h1(initial, goal)
+                : PuzzleState.h2(initial, goalPositions);
 
-        int iteration = 0;
+        final List<int[]> currentPath = new ArrayList<>();
+        currentPath.add(initial);
+
+        final Set<String> onCurrentPath = new HashSet<>();
+        onCurrentPath.add(Arrays.toString(initial));
+
+        int iterationCount = 0;
         while (true) {
-            iteration++;
-            int result = idaSearch(path, goal, goalPositions, pathSet, 0, threshold, useH1);
+            iterationCount++;
+            final int searchResult = depthLimitedSearch(currentPath, goal, goalPositions,
+                    onCurrentPath, 0, threshold, useMisplacedTiles);
 
-            if (result == -1) {
-                // Solution found - path contains the solution
-                success = true;
-                solutionPath = new ArrayList<>(path);
-                break;
-            }
-            if (result == Integer.MAX_VALUE) {
-                // No solution exists from the loop
+            if (searchResult == SOLUTION_FOUND) {
+                solved = true;
+                solutionPath = new ArrayList<>(currentPath);
                 break;
             }
 
-            System.out.println("  IDA* iteration " + iteration
-                    + ": threshold:" + threshold + " , next=" + result
-                    + " (states explored so far: " + statesExplored + ")");
-            threshold = result;  // Increase threshold to next smallest f
+            if (searchResult == Integer.MAX_VALUE) {
+                break;
+            }
+
+            System.out.println("  IDA* iteration " + iterationCount
+                    + ": threshold:" + threshold + " , next=" + searchResult
+                    + " (states explored so far: " + nodesExplored + ")");
+            threshold = searchResult;
         }
 
-        long timeMs = System.currentTimeMillis() - startTime;
+        final long elapsedMs = System.currentTimeMillis() - startTime;
 
-        PuzzleState.printResult("Iterative Deepening A* (IDA*)", hName,
-                success, solutionPath, statesExplored, timeMs);
-        System.out.println("Total IDA* iterations: " + iteration + "\n");
+        PuzzleState.printResult("Iterative Deepening A* (IDA*)", heuristicName,
+                solved, solutionPath, nodesExplored, elapsedMs);
+        System.out.println("Total IDA* iterations: " + iterationCount + "\n");
     }
 
-    public static void main(String[] args) {
+    /**
+     * Solve each puzzle with both heuristics and print results.
+     */
+    private static void solveWithBothHeuristics(final int[][] puzzle) {
+        final int[] initial = puzzle[0];
+        final int[] goal = puzzle[1];
+        final int[][] goalPositions = PuzzleState.goalPosition(goal);
+
+        System.out.println("Start State: " + PuzzleState.stateToString(initial));
+        System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
+        System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
+
+        solve(initial, goal, goalPositions, true);
+        solve(initial, goal, goalPositions, false);
+        System.out.println("#".repeat(60));
+    }
+
+    public static void main(final String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
 
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
+        if (puzzles.isEmpty()) return;
 
-        for (final int[][] input : inputData) {
-            final int[] initial = input[0];
-            final int[] goal = input[1];
-            final int[][] goalPositions = PuzzleState.goalPosition(goal);
-
-            System.out.println("Start State: " + PuzzleState.stateToString(initial));
-            System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
-            System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
-
-            // Run IDA* with h1 (Misplaced Tiles)
-            runIDAStar(initial, goal, goalPositions, true);
-
-            // Run IDA* with h2 (Manhattan Distance)
-            runIDAStar(initial, goal, goalPositions, false);
-            System.out.println("#".repeat(60));
-        }
+        puzzles.forEach(IDAStarSearch::solveWithBothHeuristics);
     }
 }

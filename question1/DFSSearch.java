@@ -5,87 +5,80 @@ import java.util.*;
  */
 public class DFSSearch {
 
-    private static final int DEPTH_LIMIT = 50;
+    private static final int MAX_DEPTH = 50;
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
 
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
+        if (puzzles.isEmpty()) return;
 
-        for (final int[][] input : inputData) {
-            processSearch(input);
+        puzzles.forEach(puzzle -> {
+            solveAndPrint(puzzle);
             System.out.println("#".repeat(60));
-        }
+        });
     }
 
-    private static void processSearch(int[][] input) {
-        final int[] initial = input[0];
-        final int[] goal = input[1];
+    /**
+     * Solve a single puzzle using depth-limited DFS and print the results.
+     */
+    private static void solveAndPrint(final int[][] puzzle) {
+        final int[] initial = puzzle[0];
+        final int[] goal = puzzle[1];
 
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
         System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
         System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
 
-        // Run DFS
         final long startTime = System.currentTimeMillis();
-        int statesExplored = 0;
-        boolean success = false;
+        int nodesExplored = 0;
+        boolean solved = false;
         List<int[]> solutionPath = null;
 
-        // Frontier
-        Deque<int[]> frontier = new ArrayDeque<>();
-        Deque<Integer> depths = new ArrayDeque<>();
-        // Parent map for path reconstruction
-        final Map<String, String> parent = new HashMap<>();
-        final Map<String, int[]> stateMap = new HashMap<>();
-        // Visited set
-        final Set<String> visited = new HashSet<>();
+        final Deque<int[]> frontier = new ArrayDeque<>();
+        final Deque<Integer> depthTracker = new ArrayDeque<>();
+        final Map<String, String> parentOf = new HashMap<>();
+        final Map<String, int[]> stateByKey = new HashMap<>();
+        final Set<String> seen = new HashSet<>();
 
-        final String initKey = Arrays.toString(initial);
+        final String initialKey = Arrays.toString(initial);
         frontier.push(initial);
-        depths.push(0);
-        parent.put(initKey, null);
-        stateMap.put(initKey, initial);
+        depthTracker.push(0);
+        parentOf.put(initialKey, null);
+        stateByKey.put(initialKey, initial);
 
         while (!frontier.isEmpty()) {
             final int[] current = frontier.pop();
-            final int depth = depths.pop();
-            final String curKey = Arrays.toString(current);
+            final int currentDepth = depthTracker.pop();
+            final String currentKey = Arrays.toString(current);
 
-            // Skip if already visited
-            if (visited.contains(curKey)) continue;
-            visited.add(curKey);
-            statesExplored++;
+            if (seen.contains(currentKey)) continue;
+            seen.add(currentKey);
+            nodesExplored++;
 
-            // Goal test
             if (Arrays.equals(current, goal)) {
-                success = true;
-                solutionPath = PuzzleState.reconstructPath(parent, stateMap, current);
+                solved = true;
+                solutionPath = PuzzleState.reconstructPath(parentOf, stateByKey, current);
                 break;
             }
 
-            // Depth bound: prevent infinite paths
-            if (depth >= DEPTH_LIMIT) continue;
+            if (currentDepth >= MAX_DEPTH) continue;
 
-            // Expand neighbors
-            for (final int[] neighbor : PuzzleState.getNeighbors(current)) {
-                String neighborKey = Arrays.toString(neighbor);
-                if (!visited.contains(neighborKey)) {
-                    parent.put(neighborKey, curKey);
-                    stateMap.put(neighborKey, neighbor);
-                    frontier.push(neighbor);
-                    depths.push(depth + 1);
+            for (final int[] successor : PuzzleState.getNeighbors(current)) {
+                final String successorKey = Arrays.toString(successor);
+                if (!seen.contains(successorKey)) {
+                    parentOf.put(successorKey, currentKey);
+                    stateByKey.put(successorKey, successor);
+                    frontier.push(successor);
+                    depthTracker.push(currentDepth + 1);
                 }
             }
         }
 
-        final long timeTakenInMS = System.currentTimeMillis() - startTime;
+        final long elapsedMs = System.currentTimeMillis() - startTime;
 
         PuzzleState.printResult("Depth-First Search (DFS)",
-                "Depth Limit = " + DEPTH_LIMIT,
-                success, solutionPath, statesExplored, timeTakenInMS);
+                "Depth Limit = " + MAX_DEPTH,
+                solved, solutionPath, nodesExplored, elapsedMs);
     }
 }

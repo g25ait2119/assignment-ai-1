@@ -5,93 +5,94 @@ import java.util.*;
  */
 public class GreedyBestFirstSearch {
 
-    // Node for priority queue
-    static class Node implements Comparable<Node> {
-        int[] state;
-        int h;
-        String key;
+    /**
+     * Represents a search node ranked solely by heuristic value.
+     */
+    static final class SearchNode implements Comparable<SearchNode> {
+        final int[] state;
+        final int heuristicValue;
+        final String stateKey;
 
-        Node(int[] state, int h) {
+        SearchNode(final int[] state, final int heuristicValue) {
             this.state = state;
-            this.h = h;
-            this.key = Arrays.toString(state);
+            this.heuristicValue = heuristicValue;
+            this.stateKey = Arrays.toString(state);
         }
 
-        public int compareTo(Node o) {
-            return Integer.compare(this.h, o.h);
+        @Override
+        public int compareTo(final SearchNode other) {
+            return Integer.compare(this.heuristicValue, other.heuristicValue);
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+        final List<int[][]> puzzles = PuzzleState.readInputMultipleLines(inputFile);
 
-        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
-        if (inputData.isEmpty()) {
-            return;
-        }
+        if (puzzles.isEmpty()) return;
 
-        for (final int[][] input : inputData) {
-            processSearch(input);
+        puzzles.forEach(puzzle -> {
+            solveAndPrint(puzzle);
             System.out.println("#".repeat(60));
-        }
+        });
     }
 
-    private static void processSearch(int[][] input) {
-        final int[] initial = input[0];
-        final int[] goal = input[1];
+    /**
+     * Solve a single puzzle using Greedy Best-First Search and print the results.
+     */
+    private static void solveAndPrint(final int[][] puzzle) {
+        final int[] initial = puzzle[0];
+        final int[] goal = puzzle[1];
         final int[][] goalPositions = PuzzleState.goalPosition(goal);
 
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
         System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
         System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
 
-        // Run Greedy Best-First Search
         final long startTime = System.currentTimeMillis();
-        int statesExplored = 0;
-        boolean success = false;
+        int nodesExplored = 0;
+        boolean solved = false;
         List<int[]> solutionPath = null;
 
-        final PriorityQueue<Node> frontier = new PriorityQueue<>();
-        final Map<String, String> parent = new HashMap<>();
-        final Map<String, int[]> stateMap = new HashMap<>();
-        final Set<String> visited = new HashSet<>();
+        final PriorityQueue<SearchNode> frontier = new PriorityQueue<>();
+        final Map<String, String> parentOf = new HashMap<>();
+        final Map<String, int[]> stateByKey = new HashMap<>();
+        final Set<String> seen = new HashSet<>();
 
-        final String initKey = Arrays.toString(initial);
-        frontier.add(new Node(initial, PuzzleState.h2(initial, goalPositions)));
-        parent.put(initKey, null);
-        stateMap.put(initKey, initial);
+        final String initialKey = Arrays.toString(initial);
+        frontier.add(new SearchNode(initial, PuzzleState.h2(initial, goalPositions)));
+        parentOf.put(initialKey, null);
+        stateByKey.put(initialKey, initial);
 
         while (!frontier.isEmpty()) {
-            final Node node = frontier.poll();
+            final SearchNode current = frontier.poll();
 
-            if (visited.contains(node.key)) continue;
-            visited.add(node.key);
-            statesExplored++;
+            if (seen.contains(current.stateKey)) continue;
+            seen.add(current.stateKey);
+            nodesExplored++;
 
-            // Goal test
-            if (PuzzleState.isGoal(node.state, goal)) {
-                success = true;
-                solutionPath = PuzzleState.reconstructPath(parent, stateMap, node.state);
+            if (PuzzleState.isGoal(current.state, goal)) {
+                solved = true;
+                solutionPath = PuzzleState.reconstructPath(parentOf, stateByKey, current.state);
                 break;
             }
 
-            // Expand: prioritize by h(n) only
-            for (int[] neighbor : PuzzleState.getNeighbors(node.state)) {
-                final String nKey = Arrays.toString(neighbor);
-                if (!visited.contains(nKey)) {
-                    if (!parent.containsKey(nKey)) {
-                        parent.put(nKey, node.key);
-                        stateMap.put(nKey, neighbor);
+            for (final int[] successor : PuzzleState.getNeighbors(current.state)) {
+                final String successorKey = Arrays.toString(successor);
+                if (!seen.contains(successorKey)) {
+                    if (!parentOf.containsKey(successorKey)) {
+                        parentOf.put(successorKey, current.stateKey);
+                        stateByKey.put(successorKey, successor);
                     }
-                    frontier.add(new Node(neighbor, PuzzleState.h2(neighbor, goalPositions)));
+                    frontier.add(new SearchNode(successor, PuzzleState.h2(successor, goalPositions)));
                 }
             }
         }
 
-        long timeMs = System.currentTimeMillis() - startTime;
+        final long elapsedMs = System.currentTimeMillis() - startTime;
 
         PuzzleState.printResult("Greedy Best-First Search",
                 "h2 - Manhattan Distance",
-                success, solutionPath, statesExplored, timeMs);
+                solved, solutionPath, nodesExplored, elapsedMs);
     }
 }
