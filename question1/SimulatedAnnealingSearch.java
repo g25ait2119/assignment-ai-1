@@ -13,11 +13,24 @@ public class SimulatedAnnealingSearch {
     private static final double MIN_TEMP = 0.001;
     private static final int MAX_ITERATIONS = 500000;
 
-    public static void main(String[] args) throws Exception {
-        String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
-        int[][] input = PuzzleState.readInput(inputFile);
-        int[] initial = input[0];
+    public static void main(String[] args) {
+        final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
+
+        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
+        if (inputData.isEmpty()) {
+            return;
+        }
+
+        for (final int[][] input : inputData) {
+            processSearch(input);
+            System.out.println("#".repeat(60));
+        }
+    }
+
+    private static void processSearch(int[][] input) {
+        final int[] initial = input[0];
         final int[] goal = input[1];
+        final int[][] goalPositions = PuzzleState.goalPosition(goal);
 
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
         System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
@@ -39,7 +52,7 @@ public class SimulatedAnnealingSearch {
 
         double T = INITIAL_TEMP;
         int[] current = initial.clone();
-        int currentH = PuzzleState.h2(current);
+        int currentH = PuzzleState.h2(current, goalPositions);
 
         // Track best state found
         int[] bestState = current.clone();
@@ -61,7 +74,7 @@ public class SimulatedAnnealingSearch {
             // Select a random neighbor
             List<int[]> neighbors = PuzzleState.getNeighbors(current);
             int[] next = neighbors.get(rng.nextInt(neighbors.size()));
-            int nextH = PuzzleState.h2(next);
+            int nextH = PuzzleState.h2(next, goalPositions);
             int deltaE = nextH - currentH; // positive = worse
 
             // Acceptance criterion: P = e^(-deltaE / T)
@@ -81,8 +94,7 @@ public class SimulatedAnnealingSearch {
 
             // Progress logging every 100,000 iterations
             if ((iter + 1) % 100000 == 0) {
-                System.out.printf("  Iteration %d: T=%.4f, current h2=%d, best h2=%d%n",
-                        iter + 1, T, currentH, bestH);
+                System.out.printf("  Iteration %d: T=%.4f, current h2=%d, best h2=%d%n", iter + 1, T, currentH, bestH);
             }
         }
 
@@ -90,9 +102,7 @@ public class SimulatedAnnealingSearch {
 
         // Print results
         System.out.println();
-        PuzzleState.printResult("Simulated Annealing",
-                "h2 - Manhattan Distance",
-                success, success ? path : null, statesExplored, timeMs);
+        PuzzleState.printResult("Simulated Annealing", "h2 - Manhattan Distance", success, success ? path : null, statesExplored, timeMs);
 
         System.out.println("Final Temperature: " + String.format("%.6f", T));
         System.out.println("Best h2 achieved : " + bestH);

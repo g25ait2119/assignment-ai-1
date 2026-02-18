@@ -22,13 +22,27 @@ public class GreedyBestFirstSearch {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
-        final int[][] input = PuzzleState.readInput(inputFile);
+
+        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
+        if (inputData.isEmpty()) {
+            return;
+        }
+
+        for (final int[][] input : inputData) {
+            processSearch(input);
+            System.out.println("#".repeat(60));
+        }
+    }
+
+    private static void processSearch(int[][] input) {
         final int[] initial = input[0];
+        final int[] goal = input[1];
+        final int[][] goalPositions = PuzzleState.goalPosition(goal);
 
         System.out.println("Start State: " + PuzzleState.stateToString(initial));
-        System.out.println("Goal  State: " + PuzzleState.stateToString(PuzzleState.GOAL));
+        System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
         System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
 
         // Run Greedy Best-First Search
@@ -43,7 +57,7 @@ public class GreedyBestFirstSearch {
         final Set<String> visited = new HashSet<>();
 
         final String initKey = Arrays.toString(initial);
-        frontier.add(new Node(initial, PuzzleState.h2(initial)));
+        frontier.add(new Node(initial, PuzzleState.h2(initial, goalPositions)));
         parent.put(initKey, null);
         stateMap.put(initKey, initial);
 
@@ -55,7 +69,7 @@ public class GreedyBestFirstSearch {
             statesExplored++;
 
             // Goal test
-            if (PuzzleState.isGoal(node.state)) {
+            if (PuzzleState.isGoal(node.state, goal)) {
                 success = true;
                 solutionPath = PuzzleState.reconstructPath(parent, stateMap, node.state);
                 break;
@@ -69,7 +83,7 @@ public class GreedyBestFirstSearch {
                         parent.put(nKey, node.key);
                         stateMap.put(nKey, neighbor);
                     }
-                    frontier.add(new Node(neighbor, PuzzleState.h2(neighbor)));
+                    frontier.add(new Node(neighbor, PuzzleState.h2(neighbor, goalPositions)));
                 }
             }
         }

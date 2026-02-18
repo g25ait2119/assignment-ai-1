@@ -31,9 +31,10 @@ public class AStarSearch {
 
     /**
      * Run A* with specified heuristic.
+     *
      * @param useH1 true = h1 (misplaced tiles), false = h2 (Manhattan distance)
      */
-    static void runAStar(int[] initial, boolean useH1) {
+    static void runAStar(int[] initial, int[] goal, int[][] goalPositions, boolean useH1) {
         final String hName = useH1 ? "h1 - Misplaced Tiles" : "h2 - Manhattan Distance";
         final long startTime = System.currentTimeMillis();
         int statesExplored = 0;
@@ -46,7 +47,7 @@ public class AStarSearch {
         Map<String, int[]> stateMap = new HashMap<>();
 
         String initKey = Arrays.toString(initial);
-        final int huresticVal = useH1 ? PuzzleState.h1(initial) : PuzzleState.h2(initial);
+        final int huresticVal = useH1 ? PuzzleState.h1(initial, goal) : PuzzleState.h2(initial, goalPositions);
         frontier.add(new Node(initial, 0, huresticVal));
         bestPathCost.put(initKey, 0);
         parent.put(initKey, null);
@@ -57,7 +58,7 @@ public class AStarSearch {
             statesExplored++;
 
             // Goal test
-            if (PuzzleState.isGoal(node.state)) {
+            if (PuzzleState.isGoal(node.state, goal)) {
                 success = true;
                 solutionPath = PuzzleState.reconstructPath(parent, stateMap, node.state);
                 break;
@@ -77,7 +78,7 @@ public class AStarSearch {
                     bestPathCost.put(nKey, newG);
                     parent.put(nKey, node.key);
                     stateMap.put(nKey, neighbor);
-                    int nh = useH1 ? PuzzleState.h1(neighbor) : PuzzleState.h2(neighbor);
+                    int nh = useH1 ? PuzzleState.h1(neighbor, goal) : PuzzleState.h2(neighbor, goalPositions);
                     frontier.add(new Node(neighbor, newG, nh));
                 }
             }
@@ -89,19 +90,31 @@ public class AStarSearch {
                 success, solutionPath, statesExplored, timeMs);
     }
 
-    public static void main(String[] args) throws Exception {
-        String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
-        int[][] input = PuzzleState.readInput(inputFile);
-        int[] initial = input[0];
+    public static void main(String[] args) {
 
-        System.out.println("Start State: " + PuzzleState.stateToString(initial));
-        System.out.println("Goal  State: " + PuzzleState.stateToString(PuzzleState.GOAL));
-        System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
+        final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
 
-        // Run A* with h1 (Misplaced Tiles)
-        runAStar(initial, true);
+        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
+        if (inputData.isEmpty()) {
+            return;
+        }
 
-        // Run A* with h2 (Manhattan Distance)
-        runAStar(initial, false);
+        for (final int[][] input : inputData) {
+            final int[] initial = input[0];
+            final int[] goal = input[1];
+            final int[][] goalPositions = PuzzleState.goalPosition(goal);
+
+            System.out.println("Start State: " + PuzzleState.stateToString(initial));
+            System.out.println("Goal  State: " + PuzzleState.stateToString(goal));
+            System.out.println("Start Grid:\n" + PuzzleState.stateToGrid(initial));
+
+            // Run A* with h1 (Misplaced Tiles)
+            runAStar(initial, goal, goalPositions, true);
+
+            // Run A* with h2 (Manhattan Distance)
+            runAStar(initial, goal, goalPositions, false);
+            System.out.println("#".repeat(60));
+        }
+
     }
 }

@@ -7,9 +7,21 @@ public class DFSSearch {
 
     private static final int DEPTH_LIMIT = 50;
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         final String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
-        final int[][] input = PuzzleState.readInput(inputFile);
+
+        final List<int[][]> inputData = PuzzleState.readInputMultipleLines(inputFile);
+        if (inputData.isEmpty()) {
+            return;
+        }
+
+        for (final int[][] input : inputData) {
+            processSearch(input);
+            System.out.println("#".repeat(60));
+        }
+    }
+
+    private static void processSearch(int[][] input) {
         final int[] initial = input[0];
         final int[] goal = input[1];
 
@@ -70,7 +82,7 @@ public class DFSSearch {
             }
         }
 
-       final long timeTakenInMS = System.currentTimeMillis() - startTime;
+        final long timeTakenInMS = System.currentTimeMillis() - startTime;
 
         PuzzleState.printResult("Depth-First Search (DFS)",
                 "Depth Limit = " + DEPTH_LIMIT,
