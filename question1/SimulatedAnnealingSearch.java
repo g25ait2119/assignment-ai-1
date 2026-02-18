@@ -14,7 +14,7 @@ public class SimulatedAnnealingSearch {
     private static final int MAX_ITERATIONS = 500000;
 
     public static void main(String[] args) throws Exception {
-        String inputFile = args.length > 0 ? args[0] : "question1/inputfile/input.txt";
+        String inputFile = args.length > 0 ? args[0] : "inputfile/input.txt";
         int[][] input = PuzzleState.readInput(inputFile);
         int[] initial = input[0];
         final int[] goal = input[1];
