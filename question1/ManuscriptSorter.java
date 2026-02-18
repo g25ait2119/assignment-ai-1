@@ -31,6 +31,13 @@ public class ManuscriptSorter {
         System.out.println("*".repeat(60));
         System.out.println();
         IDAStarSearch.main(new String[]{inputFile});
+        SimulatedAnnealingSearch.main(new String[]{inputFile});
+
+        System.out.println("*".repeat(60));
+        System.out.println("*  SECTION 2D: ADVERSARIAL SEARCH");
+        System.out.println("*".repeat(60));
+        System.out.println();
+        AdversarialSearch.main(new String[]{inputFile});
 
     }
 }
