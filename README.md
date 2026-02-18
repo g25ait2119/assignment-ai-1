@@ -23,7 +23,7 @@ question2/
   ForwardCheckingDemo.java   -- step-by-step forward checking walkthrough
   ArcConsistency.java        -- AC-3 preprocessing + backtracking
 ```
-## Setup (GitHub Codespaces)
+## GitHub Codespaces Setup (This can run locally also)
 
 Open the repo in a Codespace — Java 11+ comes preinstalled. Verify with:
 
